@@ -1,15 +1,27 @@
 from sqlalchemy.orm import Session
 import models
 
-def create_task(db: Session, task_data):
-    new_task = models.Task(**task_data.dict())
+
+# ✅ CREATE TASK (assign owner)
+def create_task(db: Session, task_data, current_user):
+    new_task = models.Task(
+        **task_data.dict(),
+        user_id=current_user.id   # 🔐 ownership
+    )
+
     db.add(new_task)
     db.commit()
-    return {"message": "Task created"}
+    db.refresh(new_task)
+
+    return new_task
 
 
-def get_tasks(db: Session, priority: str = None):
-    query = db.query(models.Task).filter(models.Task.is_deleted == False)
+# ✅ GET ALL TASKS (user isolation)
+def get_tasks(db: Session, current_user, priority: str = None):
+    query = db.query(models.Task).filter(
+        models.Task.user_id == current_user.id,   # 🔐 only user's tasks
+        models.Task.is_deleted == False
+    )
 
     if priority:
         query = query.filter(models.Task.priority == priority)
@@ -17,29 +29,49 @@ def get_tasks(db: Session, priority: str = None):
     return query.all()
 
 
-def get_task(db: Session, task_id: int):
-    return db.query(models.Task).filter(models.Task.id == task_id).first()
+# ✅ GET SINGLE TASK (ownership check)
+def get_task(db: Session, task_id: int, current_user):
+    task = db.query(models.Task).filter(
+        models.Task.id == task_id,
+        models.Task.is_deleted == False
+    ).first()
+
+    if not task or task.user_id != current_user.id:
+        return None   # 🔐 hide data
+
+    return task
 
 
-def update_task(db: Session, task_id: int, data):
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+# ✅ UPDATE TASK (only owner)
+def update_task(db: Session, task_id: int, data, current_user):
+    task = db.query(models.Task).filter(
+        models.Task.id == task_id,
+        models.Task.is_deleted == False
+    ).first()
 
-    if not task:
-        return None
+    if not task or task.user_id != current_user.id:
+        return None   # 🔐 not allowed
 
     for key, value in data.dict(exclude_unset=True).items():
         setattr(task, key, value)
 
     db.commit()
+    db.refresh(task)
+
     return task
 
 
-def delete_task(db: Session, task_id: int):
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+# ✅ DELETE TASK (only owner, soft delete)
+def delete_task(db: Session, task_id: int, current_user):
+    task = db.query(models.Task).filter(
+        models.Task.id == task_id,
+        models.Task.is_deleted == False
+    ).first()
 
-    if not task:
-        return None
+    if not task or task.user_id != current_user.id:
+        return None   # 🔐 not allowed
 
     task.is_deleted = True
     db.commit()
+
     return task
