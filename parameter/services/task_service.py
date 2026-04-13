@@ -2,11 +2,13 @@ from sqlalchemy.orm import Session
 import models
 
 
-# ✅ CREATE TASK (assign owner)
+# =========================
+# ✅ CREATE TASK (Ownership)
+# =========================
 def create_task(db: Session, task_data, current_user):
     new_task = models.Task(
         **task_data.dict(),
-        user_id=current_user.id   # 🔐 ownership
+        user_id=current_user.id   # 🔐 assign owner
     )
 
     db.add(new_task)
@@ -16,10 +18,12 @@ def create_task(db: Session, task_data, current_user):
     return new_task
 
 
-# ✅ GET ALL TASKS (user isolation)
+# =========================
+# ✅ GET ALL TASKS (Isolation)
+# =========================
 def get_tasks(db: Session, current_user, priority: str = None):
     query = db.query(models.Task).filter(
-        models.Task.user_id == current_user.id,   # 🔐 only user's tasks
+        models.Task.user_id == current_user.id,
         models.Task.is_deleted == False
     )
 
@@ -29,20 +33,25 @@ def get_tasks(db: Session, current_user, priority: str = None):
     return query.all()
 
 
-# ✅ GET SINGLE TASK (ownership check)
+# =========================
+# ✅ GET SINGLE TASK (Ownership)
+# =========================
 def get_task(db: Session, task_id: int, current_user):
     task = db.query(models.Task).filter(
         models.Task.id == task_id,
         models.Task.is_deleted == False
     ).first()
 
+    # 🔐 Hide existence (best practice)
     if not task or task.user_id != current_user.id:
-        return None   # 🔐 hide data
+        return None
 
     return task
 
 
-# ✅ UPDATE TASK (only owner)
+# =========================
+# ✅ UPDATE TASK (Only Owner)
+# =========================
 def update_task(db: Session, task_id: int, data, current_user):
     task = db.query(models.Task).filter(
         models.Task.id == task_id,
@@ -50,9 +59,12 @@ def update_task(db: Session, task_id: int, data, current_user):
     ).first()
 
     if not task or task.user_id != current_user.id:
-        return None   # 🔐 not allowed
+        return None
 
-    for key, value in data.dict(exclude_unset=True).items():
+    # 🔐 Only update allowed fields
+    update_data = data.dict(exclude_unset=True)
+
+    for key, value in update_data.items():
         setattr(task, key, value)
 
     db.commit()
@@ -61,7 +73,9 @@ def update_task(db: Session, task_id: int, data, current_user):
     return task
 
 
-# ✅ DELETE TASK (only owner, soft delete)
+# =========================
+# ✅ DELETE TASK (Soft Delete)
+# =========================
 def delete_task(db: Session, task_id: int, current_user):
     task = db.query(models.Task).filter(
         models.Task.id == task_id,
@@ -69,9 +83,10 @@ def delete_task(db: Session, task_id: int, current_user):
     ).first()
 
     if not task or task.user_id != current_user.id:
-        return None   # 🔐 not allowed
+        return None
 
     task.is_deleted = True
+
     db.commit()
 
     return task

@@ -1,31 +1,33 @@
-from fastapi import Header
-from utils import verify_token
-from fastapi import Depends, Header
+from fastapi import Header, HTTPException, Depends
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from database import SessionLocal
+from utils import verify_token
 import models
-from database import get_db
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 def get_current_user(
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    # 🔴 Check header exists
     if not authorization:
-        raise HTTPException(status_code=401, detail="Token missing")
+        raise HTTPException(status_code=401, detail="Missing token")
 
-    # 🔴 Format: Bearer <token>
     try:
         scheme, token = authorization.split()
         if scheme.lower() != "bearer":
-            raise HTTPException(status_code=401, detail="Invalid token format")
+            raise Exception()
     except:
         raise HTTPException(status_code=401, detail="Invalid token format")
 
-    # 🔐 Decode token
     user_id = verify_token(token)
 
-    # 🔍 Get user from DB
     user = db.query(models.User).filter(models.User.id == user_id).first()
 
     if not user:

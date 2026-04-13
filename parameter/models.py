@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -11,23 +12,24 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
 
-    # Relationship
-    tasks = relationship("Task", back_populates="owner")
+    # 🔗 Relationship (One user → many tasks)
+    tasks = relationship("Task", back_populates="owner", cascade="all, delete")
 
 
 class Task(Base):
     __tablename__ = "tasks"
 
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
     title = Column(String(100), nullable=False)
     description = Column(String(255))
     status = Column(String(50), default="pending")
     priority = Column(String(50))
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_deleted = Column(Boolean, default=False)
 
-    user_id = Column(Integer, ForeignKey("users.id"))
+    # 🔐 Ownership (IMPORTANT)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
 
-    # Relationship
+    # 🔗 Relationship (Many tasks → one user)
     owner = relationship("User", back_populates="tasks")

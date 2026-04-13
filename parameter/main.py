@@ -1,37 +1,32 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 import models
 import schemas
-from database import engine, SessionLocal
-from utils import hash_password
-from utils import verify_password, create_access_token
-from routers import task_routers  # your task routes
+from database import engine
+from utils import hash_password, verify_password, create_access_token, get_db
+from routers import task_routers
 
-# Create tables
+# 🔹 Create tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 
-# 🔹 Dependency (DB)
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
+# =========================
 # 🔹 REGISTER API
-@app.post("/register")
+# =========================
+@app.post("/register", response_model=schemas.UserResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
     # 🔸 Check if email already exists
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
 
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
 
     # 🔸 Hash password
     hashed_password = hash_password(user.password)
@@ -48,31 +43,30 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return {
-        "message": "User registered successfully",
-        "user": {
-            "id": new_user.id,
-            "name": new_user.name,
-            "email": new_user.email
-        }
-    }
+    return new_user
 
 
-# 🔹 INCLUDE TASK ROUTES
-app.include_router(task_routers.router)
-
-@app.post("/login")
+# =========================
+# 🔹 LOGIN API
+# =========================
+@app.post("/login", response_model=schemas.TokenResponse)
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
-    
+
     # 🔸 Check if user exists
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    
+
     if not db_user:
-        raise HTTPException(status_code=400, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid email or password"
+        )
 
     # 🔸 Verify password
     if not verify_password(user.password, db_user.password):
-        raise HTTPException(status_code=400, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid email or password"
+        )
 
     # 🔸 Create JWT token
     access_token = create_access_token(
@@ -80,5 +74,12 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     )
 
     return {
-        "access_token": access_token
+        "access_token": access_token,
+        "token_type": "bearer"
     }
+
+
+# =========================
+# 🔹 INCLUDE TASK ROUTES
+# =========================
+app.include_router(task_routers.router)
