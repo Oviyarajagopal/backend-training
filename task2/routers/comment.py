@@ -88,3 +88,21 @@ def update_comment(
     db.commit()
 
     return {"message": "Updated successfully"}
+
+@router.delete("/comments/{id}")
+def delete_comment(id: int,
+                   db: Session = Depends(get_db),
+                   current_user = Depends(get_current_user)):
+
+    comment = db.query(Comment).filter(Comment.id == id).first()
+
+    if not comment:
+        raise HTTPException(404, "Comment not found")
+
+    if comment.user_id != current_user.id:
+        raise HTTPException(403, "Not authorized")
+
+    comment.is_deleted = True
+    db.commit()
+
+    return {"message": "Deleted"}
